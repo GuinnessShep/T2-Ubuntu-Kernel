@@ -5,7 +5,7 @@ Subject: [PATCH] Bluetooth: hci_bcm43xx: Add new driver for BCM43XX PCI boards
 
 Signed-off-by: Sven Peter <sven@svenpeter.dev>
 
-redecorating: added #define DEBUG
+redecorating: added #define DEBUG, hard code formosa board type
 ---
  MAINTAINERS                     |    1 +
  drivers/bluetooth/Kconfig       |   12 +
@@ -38,7 +38,7 @@ index e307074054553a..2f5ca7bc7c14ce 100644
 +config BT_HCIBCM43XX
 +	tristate "HCI BCM43xx PCI driver"
 +	depends on PCI
-+	default m
++	default ARCH_APPLE
 +	help
 +	  Support for Broadcom BCM43xx bluetooth chipsets attached over PCI,
 +	  which are usually found in Apple machines.
@@ -981,8 +981,8 @@ index 00000000000000..700c5594a8a244
 +	char name[256];
 +	int ret;
 +
-+	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-%s-%s.%s",
-+		 bcm43xx->hw->name, bcm43xx->stepping, bcm43xx->board_type,
++	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-apple,formosa-%s.%s",
++		 bcm43xx->hw->name, bcm43xx->stepping,
 +		 bcm43xx->vendor, suffix);
 +	dev_info(&bcm43xx->pdev->dev, "Trying to load '%s'", name);
 +
@@ -990,8 +990,8 @@ index 00000000000000..700c5594a8a244
 +	if (!ret)
 +		return fw;
 +
-+	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-%s.%s", bcm43xx->hw->name,
-+		 bcm43xx->stepping, bcm43xx->board_type, suffix);
++	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-apple,formosa.%s", bcm43xx->hw->name,
++		 bcm43xx->stepping, suffix);
 +	ret = request_firmware(&fw, name, &bcm43xx->pdev->dev);
 +	dev_info(&bcm43xx->pdev->dev, "Trying to load '%s'", name);
 +	if (!ret)
@@ -1902,7 +1902,7 @@ index 00000000000000..700c5594a8a244
 +		ret = bcm43xx_probe_acpi(bcm43xx);
 +	else {
 +		dev_err(&pdev->dev, "device is neither OF nor ACPI\n");
-+		return -ENODEV;
++
 +	}
 +	if (ret) {
 +		dev_err(&pdev->dev, "unable to determine board type\n");
