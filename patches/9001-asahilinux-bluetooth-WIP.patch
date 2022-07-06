@@ -1,17 +1,15 @@
-From 65cfe9d894b27327f43e5ed2a94fdba8fc6e06f9 Mon Sep 17 00:00:00 2001
+From a1e15829f0faa83ea0884f38fa4cae8990f76801 Mon Sep 17 00:00:00 2001
 From: Sven Peter <sven@svenpeter.dev>
-Date: Fri, 1 Jul 2022 17:21:01 +0200
+Date: Wed, 6 Jul 2022 20:04:22 +0200
 Subject: [PATCH] Bluetooth: hci_bcm43xx: Add new driver for BCM43XX PCI boards
 
 Signed-off-by: Sven Peter <sven@svenpeter.dev>
-
-redecorating: added #define DEBUG, hard code formosa board type
 ---
  MAINTAINERS                     |    1 +
  drivers/bluetooth/Kconfig       |   12 +
  drivers/bluetooth/Makefile      |    2 +
- drivers/bluetooth/hci_bcm43xx.c | 1975 +++++++++++++++++++++++++++++++
- 4 files changed, 1990 insertions(+)
+ drivers/bluetooth/hci_bcm43xx.c | 1970 +++++++++++++++++++++++++++++++
+ 4 files changed, 1985 insertions(+)
  create mode 100644 drivers/bluetooth/hci_bcm43xx.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
@@ -38,7 +36,7 @@ index e307074054553a..2f5ca7bc7c14ce 100644
 +config BT_HCIBCM43XX
 +	tristate "HCI BCM43xx PCI driver"
 +	depends on PCI
-+	default m
++	default ARCH_APPLE
 +	help
 +	  Support for Broadcom BCM43xx bluetooth chipsets attached over PCI,
 +	  which are usually found in Apple machines.
@@ -64,10 +62,10 @@ index 3321a8aea4a065..2be16bd3c32c0a 100644
  
 diff --git a/drivers/bluetooth/hci_bcm43xx.c b/drivers/bluetooth/hci_bcm43xx.c
 new file mode 100644
-index 00000000000000..700c5594a8a244
+index 00000000000000..ce382517a0b6ed
 --- /dev/null
 +++ b/drivers/bluetooth/hci_bcm43xx.c
-@@ -0,0 +1,1975 @@
+@@ -0,0 +1,1970 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +/*
 + * Bluetooth HCI driver for Broadcom 43XX devices attached via PCI
@@ -95,8 +93,9 @@ index 00000000000000..700c5594a8a244
 + * by simple advancing the head of the transfer ring and ringing a doorbell.
 + *
 + */
-+#define DEBUG
-+#include <linux/acpi.h>
++
++//#define DEBUG
++
 +#include <linux/async.h>
 +#include <linux/bitfield.h>
 +#include <linux/completion.h>
@@ -131,9 +130,8 @@ index 00000000000000..700c5594a8a244
 + * (possibly to avoid 64 bit arithmetic). The window size cannot exceed
 + * 0xffffffff but is always aligned down to the previous 0x200 byte boundary
 + * which effectively limits the window to [start, start+0xfffffe00].
-+ * On all machines where these devices are present (Apple x86 and arm64
-+ * machines) it will always be behind an IOMMU.
-+ * We abuse that and just limit the DMA window to [0, 0xfffffe00].
++ * We just limit the DMA window to [0, 0xfffffe00] to make sure we don't
++ * run into this limitation.
 + */
 +#define BCM43XX_DMA_MASK 0xfffffe00
 +
@@ -195,9 +193,6 @@ index 00000000000000..700c5594a8a244
 +#define BCM43XX_N_COMPLETION_RINGS 7
 +
 +#define BCM43XX_CONTROL_MSG_SIZE 0x34
-+#define BCM43XX_HCI_PAYLOAD_SIZE 264
-+#define BCM43XX_SCO_PAYLOAD_SIZE 264
-+#define BCM43XX_ACL_PAYLOAD_SIZE 0x3f0
 +
 +#define BCM43XX_MAX_RING_SIZE 256
 +
@@ -431,6 +426,8 @@ index 00000000000000..700c5594a8a244
 +
 +	bool has_bar0_window5;
 +	bool m2m_reset_on_ss_reset_disabled;
++
++	const char *default_board_type;
 +
 +	int (*send_calibration)(struct bcm43xx_data *bcm43xx);
 +};
@@ -672,8 +669,13 @@ index 00000000000000..700c5594a8a244
 +static irqreturn_t bcm43xx_irq(int irq, void *data)
 +{
 +	struct bcm43xx_data *bcm43xx = data;
++	u32 bootstage, rti_status;
 +
-+	dev_dbg(&bcm43xx->pdev->dev, "interrupt\n");
++	bootstage = ioread32(bcm43xx->bar2 + BCM43XX_BAR2_BOOTSTAGE);
++	rti_status = ioread32(bcm43xx->bar2 + BCM43XX_BAR2_RTI_STATUS);
++	dev_dbg(&bcm43xx->pdev->dev,
++		"interrupt; bootstage = %d, rti state = %d\n", bootstage,
++		rti_status);
 +
 +	complete(&bcm43xx->event);
 +
@@ -981,8 +983,8 @@ index 00000000000000..700c5594a8a244
 +	char name[256];
 +	int ret;
 +
-+	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-apple,formosa-%s.%s",
-+		 bcm43xx->hw->name, bcm43xx->stepping,
++	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-%s-%s.%s",
++		 bcm43xx->hw->name, bcm43xx->stepping, bcm43xx->board_type,
 +		 bcm43xx->vendor, suffix);
 +	dev_info(&bcm43xx->pdev->dev, "Trying to load '%s'", name);
 +
@@ -990,8 +992,8 @@ index 00000000000000..700c5594a8a244
 +	if (!ret)
 +		return fw;
 +
-+	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-apple,formosa.%s", bcm43xx->hw->name,
-+		 bcm43xx->stepping, suffix);
++	snprintf(name, sizeof(name), "brcm/brcmbt%s%s-%s.%s", bcm43xx->hw->name,
++		 bcm43xx->stepping, bcm43xx->board_type, suffix);
 +	ret = request_firmware(&fw, name, &bcm43xx->pdev->dev);
 +	dev_info(&bcm43xx->pdev->dev, "Trying to load '%s'", name);
 +	if (!ret)
@@ -1053,7 +1055,11 @@ index 00000000000000..700c5594a8a244
 +
 +static int bcm43xx_hci_open(struct hci_dev *hdev)
 +{
-+	struct bcm43xx_data *bcm43xx = hci_get_drvdata(hdev);
++	return 0;
++}
++
++static int bcm43xx_open_rings(struct bcm43xx_data *bcm43xx)
++{
 +	int ret;
 +
 +	ret = bcm43xx_create_completion_ring(bcm43xx,
@@ -1123,17 +1129,19 @@ index 00000000000000..700c5594a8a244
 +{
 +	struct bcm43xx_data *bcm43xx = hci_get_drvdata(hdev);
 +
++#if 0
 +	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->acl_d2h_ring);
 +	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->acl_h2d_ring);
 +	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->sco_d2h_ring);
 +	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->sco_h2d_ring);
-+	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->hci_h2d_ring);
++	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->hci_d2h_ring);
 +	bcm43xx_destroy_transfer_ring(bcm43xx, &bcm43xx->hci_h2d_ring);
 +
 +	bcm43xx_destroy_completion_ring(bcm43xx, &bcm43xx->sco_event_ring);
 +	bcm43xx_destroy_completion_ring(bcm43xx, &bcm43xx->sco_ack_ring);
 +	bcm43xx_destroy_completion_ring(bcm43xx, &bcm43xx->hci_acl_event_ring);
 +	bcm43xx_destroy_completion_ring(bcm43xx, &bcm43xx->hci_acl_ack_ring);
++#endif
 +
 +	return 0;
 +}
@@ -1195,18 +1203,14 @@ index 00000000000000..700c5594a8a244
 +
 +static int bcm43xx_hci_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 +{
-+	u8 bdaddr_swapped[6];
 +	struct sk_buff *skb;
-+	int i, err;
++	int err;
 +
-+	/* Unlike the regular BCM chips the address has to be swapped here */
-+	for (i = 0; i < sizeof(bdaddr_swapped); ++i)
-+		bdaddr_swapped[sizeof(bdaddr_swapped) - i - 1] = bdaddr->b[i];
-+
-+	skb = __hci_cmd_sync(hdev, 0xfc01, 6, bdaddr_swapped, HCI_INIT_TIMEOUT);
++	skb = __hci_cmd_sync(hdev, 0xfc01, 6, bdaddr, HCI_INIT_TIMEOUT);
 +	if (IS_ERR(skb)) {
 +		err = PTR_ERR(skb);
-+		bt_dev_err(hdev, "btbcmpci: Change address command failed (%d)",
++		bt_dev_err(hdev,
++			   "hci_bcm43xx: Change address command failed (%d)",
 +			   err);
 +		return err;
 +	}
@@ -1733,7 +1737,8 @@ index 00000000000000..700c5594a8a244
 +static int bcm43xx_read_otp(struct bcm43xx_data *bcm43xx)
 +{
 +	u8 otp[BCM43XX_OTP_SIZE];
-+	int i, ret;
++	int i;
++	int ret = -ENOENT;
 +
 +	for (i = 0; i < BCM43XX_OTP_SIZE; ++i)
 +		otp[i] = ioread8(bcm43xx->bar0 + BCM43XX_BAR0_OTP_OFFSET + i);
@@ -1814,7 +1819,7 @@ index 00000000000000..700c5594a8a244
 +		return ret;
 +
 +	// TODO: 19 and 16 are probably M2M and SS reset
-+	if (!bcm43xx->hw->m2m_reset_on_ss_reset_disabled)
++	if (bcm43xx->hw->m2m_reset_on_ss_reset_disabled)
 +		ctrl &= ~BIT(19); // BIT(19) = M2M reset?
 +	ctrl |= BIT(16);
 +
@@ -1825,45 +1830,33 @@ index 00000000000000..700c5594a8a244
 +static int bcm43xx_probe_of(struct bcm43xx_data *bcm43xx)
 +{
 +	struct device_node *np = bcm43xx->pdev->dev.of_node;
++	int ret;
 +
-+	if (of_property_read_string(np, "brcm,board-type",
-+				    &bcm43xx->board_type)) {
-+		dev_dbg(&bcm43xx->pdev->dev, "no brcm,board-type property\n");
-+		return -ENOENT;
++	if (!np)
++		return 0;
++
++	ret = of_property_read_string(np, "brcm,board-type",
++				      &bcm43xx->board_type);
++	if (ret) {
++		dev_err(&bcm43xx->pdev->dev, "no brcm,board-type property\n");
++		return ret;
 +	}
 +
 +	bcm43xx->taurus_beamforming_cal_blob =
 +		of_get_property(np, "brcm,taurus-bf-cal-blob",
 +				&bcm43xx->taurus_beamforming_cal_size);
-+	bcm43xx->taurus_cal_blob = of_get_property(np, "brcm,taurus-cal-blob",
-+						   &bcm43xx->taurus_cal_size);
-+
-+	return 0;
-+}
-+
-+static int bcm43xx_probe_acpi(struct bcm43xx_data *bcm43xx)
-+{
-+	const union acpi_object *o;
-+	struct device *dev = &bcm43xx->pdev->dev;
-+	struct acpi_device *adev = ACPI_COMPANION(dev);
-+	int ret;
-+
-+	if (!adev)
-+		return -ENOENT;
-+
-+	ret = acpi_dev_get_property(adev, "module-instance", ACPI_TYPE_STRING,
-+				    &o);
-+	if (ret) {
-+		dev_err(dev, "no ACPI module-instance\n");
++	if (!bcm43xx->taurus_beamforming_cal_blob) {
++		dev_err(&bcm43xx->pdev->dev,
++			"no brcm,taurus-bf-cal-blob property\n");
 +		return -ENOENT;
 +	}
-+
-+	dev_dbg(dev, "ACPI module-instance=%s\n", o->string.pointer);
-+
-+	bcm43xx->board_type =
-+		devm_kasprintf(dev, GFP_KERNEL, "apple,%s", o->string.pointer);
-+	if (!bcm43xx->board_type)
-+		return -ENOMEM;
++	bcm43xx->taurus_cal_blob = of_get_property(np, "brcm,taurus-cal-blob",
++						   &bcm43xx->taurus_cal_size);
++	if (!bcm43xx->taurus_cal_blob) {
++		dev_err(&bcm43xx->pdev->dev,
++			"no brcm,taurus-cal-blob property\n");
++		return -ENOENT;
++	}
 +
 +	return 0;
 +}
@@ -1896,15 +1889,11 @@ index 00000000000000..700c5594a8a244
 +	if (ret)
 +		return ret;
 +
-+	if (pdev->dev.of_node)
-+		ret = bcm43xx_probe_of(bcm43xx);
-+	else if (ACPI_HANDLE(&pdev->dev))
-+		ret = bcm43xx_probe_acpi(bcm43xx);
-+	else {
-+		dev_err(&pdev->dev, "device is neither OF nor ACPI\n");
-+
-+	}
-+	if (ret) {
++	bcm43xx->board_type = bcm43xx->hw->default_board_type;
++	ret = bcm43xx_probe_of(bcm43xx);
++	if (ret)
++		return ret;
++	if (!bcm43xx->board_type) {
 +		dev_err(&pdev->dev, "unable to determine board type\n");
 +		return ret;
 +	}
@@ -1926,8 +1915,10 @@ index 00000000000000..700c5594a8a244
 +		return -EBUSY;
 +
 +	ret = bcm43xx_read_otp(bcm43xx);
-+	if (ret)
++	if (ret) {
++		dev_err(&pdev->dev, "Reading OTP failed with %d\n", ret);
 +		return ret;
++	}
 +
 +	// TODO: check if legacy irqs also work
 +	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
@@ -1977,6 +1968,12 @@ index 00000000000000..700c5594a8a244
 +	if (ret)
 +		return ret;
 +
++	// TODO: figure out to do a full reset or make sure to close the rings
++	// on remove
++	ret = bcm43xx_open_rings(bcm43xx);
++	if (ret)
++		return ret;
++
 +	ret = hci_register_dev(hdev);
 +	if (ret)
 +		return ret;
@@ -1989,9 +1986,7 @@ index 00000000000000..700c5594a8a244
 +		.name = "4377",
 +		.bar0_window0 = 0x1800b000,
 +		.bar0_window1 = 0x1810c000,
-+		.has_bar0_window5 = false,
-+		.m2m_reset_on_ss_reset_disabled = false,
-+		.send_calibration = NULL,
++		.default_board_type = "formosa",
 +	},
 +
 +	[BCM4378] = {
@@ -2000,7 +1995,6 @@ index 00000000000000..700c5594a8a244
 +		.bar0_window1 = 0x1810a000,
 +		.bar0_window5 = 0x18107000,
 +		.has_bar0_window5 = true,
-+		.m2m_reset_on_ss_reset_disabled = false,
 +		.send_calibration = bcm4378_send_calibration,
 +	},
 +
@@ -2031,8 +2025,7 @@ index 00000000000000..700c5594a8a244
 +MODULE_DEVICE_TABLE(pci, bcm43xx_devid_table);
 +
 +static struct pci_driver bcm43xx_pci_driver = {
-+	.node = {},
-+	.name = "bcm43xx",
++	.name = "hci_bcm43xx",
 +	.id_table = bcm43xx_devid_table,
 +	.probe = bcm43xx_probe,
 +};
