@@ -12,9 +12,9 @@ fi
 KERNEL_VERSION=5.19
 PKGREL=1
 
-if [[ $USE_T2LINUX_REPO = tfalse ]]
+if [[ $USE_T2LINUX_REPO = false ]]
 then
-#KERNEL_REPOSITORY=https://github.com/t2linux/kernel.git
+KERNEL_REPOSITORY=https://github.com/t2linux/kernel.git
 else
 #KERNEL_REPOSITORY=git://kernel.ubuntu.com/virgin/linux-stable.git
 KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
