@@ -17,7 +17,7 @@ then
 KERNEL_REPOSITORY=https://github.com/t2linux/kernel.git
 else
 #KERNEL_REPOSITORY=git://kernel.ubuntu.com/virgin/linux-stable.git
-KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/
 fi
 
 APPLE_BCE_REPOSITORY=https://github.com/kekrby/apple-bce.git
