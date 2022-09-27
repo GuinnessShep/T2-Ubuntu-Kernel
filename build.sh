@@ -14,10 +14,10 @@ PKGREL=2
 
 if [[ $USE_T2LINUX_REPO = true ]]
 then
-KERNEL_REPOSITORY=https://github.com/t2linux/kernel.git
+KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/
 else
-#KERNEL_REPOSITORY=git://kernel.ubuntu.com/virgin/linux-stable.git
-KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+#KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/
+KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/
 fi
 
 APPLE_BCE_REPOSITORY=https://github.com/kekrby/apple-bce.git
