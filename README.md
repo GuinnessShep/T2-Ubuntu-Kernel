@@ -1,8 +1,10 @@
 # T2 Ubuntu Kernel
 
-Ubuntu/Mint/Debian kernel with Apple T2 patches built-in. This repo will try to keep up with kernel new releases.
+Ubuntu/Mint kernel with Apple T2 patches built-in. This repo will try to keep up with kernel new releases.
 
-![Build Kernel Package](https://github.com/t2linux/T2-Ubuntu-Kernel/actions/workflows/build.yml/badge.svg?branch=Mainline)
+**Note for Debian users :-** Since Debian doesn't support the kernels released in this repo, Debian users are suggested to use [this fork](https://github.com/andersfugmann/T2-Debian-Kernel) to get compatible kernels.
+
+![Build Kernel Package](https://github.com/t2linux/T2-Ubuntu-Kernel/actions/workflows/kernel.yml/badge.svg?branch=Mainline)
 
 This project is closely inspired by mikeeq/mbp-fedora-kernel and marcosfad/mbp-ubuntu-kernel. Thank you @mikeeq and @marcosfad for the scripts and setup.
 
@@ -32,7 +34,7 @@ If you want to install an older kernel (i.e. older than 5.16.2 or 5.15.16 (LTS))
 Firstly add the **t2-ubuntu-repo** apt repo :-
 
 ```bash
-curl -s --compressed "https://adityagarg8.github.io/t2-ubuntu-repo/KEY.gpg" | sudo apt-key add -
+curl -s --compressed "https://adityagarg8.github.io/t2-ubuntu-repo/KEY.gpg" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/t2-ubuntu-repo.gpg >/dev/null
 sudo curl -s --compressed -o /etc/apt/sources.list.d/t2.list "https://adityagarg8.github.io/t2-ubuntu-repo/t2.list"
 sudo apt update
 ```
@@ -52,8 +54,10 @@ sudo apt install t2-kernel-script-lts
 Now, whenever you wish to upgrade your kernel, run :-
 
 ```bash
-update_t2_kernel -v
+update_t2_kernel
 ```
+
+**Note :-** By default, whenever you run `update_t2_kernel`, the script installs the latest Kernel (LTS or Mainline, depending on your script) as well as preserves the Kernel which is booted during running of the script. Rest all old T2 kernels get removed (self compiled and official Ubuntu Kernels are not affected). In case you wish to remove the Kernel which is booted as well, which may be required which switching to LTS Kernel from Mainline ones, run `update_t2_kernel --remove-current`.
 
 ### Download package manually
 

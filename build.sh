@@ -9,8 +9,16 @@ echo "Abort!"
 exit 1
 fi
 
-KERNEL_VERSION=5.19.11
-PKGREL=2
+### Environment variable
+export DEBIAN_FRONTEND=noninteractive
+
+### Dependencies in docker
+apt-get update
+apt-get install -y lsb-release
+
+KERNEL_VERSION=6.0.11
+PKGREL=1
+CODENAME=$(lsb_release -c | cut -d ":" -f 2 | xargs)
 
 if [[ $USE_T2LINUX_REPO = true ]]
 then
@@ -21,7 +29,6 @@ KERNEL_REPOSITORY=https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-nex
 fi
 
 APPLE_BCE_REPOSITORY=https://github.com/kekrby/apple-bce.git
-APPLE_IBRIDGE_REPOSITORY=https://github.com/Redecorating/apple-ib-drv.git
 REPO_PATH=$(pwd)
 WORKING_PATH=/root/work
 KERNEL_PATH="${WORKING_PATH}/linux-kernel"
@@ -46,8 +53,6 @@ cp -rf "${REPO_PATH}"/{patches,templates} "${WORKING_PATH}"
 rm -rf "${KERNEL_PATH}"
 
 ### Dependencies
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
 apt-get install -y build-essential fakeroot libncurses-dev bison flex libssl-dev libelf-dev \
   openssl dkms libudev-dev libpci-dev libiberty-dev autoconf wget xz-utils git \
   libcap-dev bc rsync cpio dh-modaliases debhelper kernel-wedge curl gawk dwarves zstd
@@ -62,7 +67,6 @@ git clone --depth 1 --single-branch --branch "v${KERNEL_VERSION}" \
   "${KERNEL_REPOSITORY}" "${KERNEL_PATH}"
 fi
 git clone --depth 1 "${APPLE_BCE_REPOSITORY}" "${KERNEL_PATH}/drivers/staging/apple-bce"
-git clone --depth 1 "${APPLE_IBRIDGE_REPOSITORY}" "${KERNEL_PATH}/drivers/staging/apple-ibridge"
 cd "${KERNEL_PATH}" || exit
 
 if [[ $USE_T2LINUX_REPO = false ]]
@@ -111,17 +115,21 @@ sed -i 's/CONFIG_MESSAGE_LOGLEVEL_DEFAULT=.*/CONFIG_MESSAGE_LOGLEVEL_DEFAULT=4/g
 cp "${WORKING_PATH}/templates/default-config" "${KERNEL_PATH}/.config"
 make olddefconfig
 ./scripts/config --module CONFIG_BT_HCIBCM4377
+./scripts/config --module CONFIG_HID_APPLE_IBRIDGE
+./scripts/config --module CONFIG_HID_APPLE_TOUCHBAR
+./scripts/config --module CONFIG_HID_APPLE_MAGIC_BACKLIGHT
 
 # Get rid of the dirty tag
 echo "" >"${KERNEL_PATH}"/.scmversion
 
 # Build Deb packages
-make -j "$(getconf _NPROCESSORS_ONLN)" deb-pkg LOCALVERSION=-t2 KDEB_PKGVERSION="$(make kernelversion)-$(get_next_version)"
+make -j "$(getconf _NPROCESSORS_ONLN)" deb-pkg LOCALVERSION=-t2-"${CODENAME}" KDEB_PKGVERSION="$(make kernelversion)-$(get_next_version)"
 
 #### Copy artifacts to shared volume
 echo >&2 "===]> Info: Copying debs and calculating SHA256 ... "
 #cp -rfv ../*.deb "${REPO_PATH}/"
 #cp -rfv "${KERNEL_PATH}/.config" "${REPO_PATH}/kernel_config_${KERNEL_VERSION}"
-cp -rfv "${KERNEL_PATH}/.config" "/tmp/artifacts/kernel_config_${KERNEL_VERSION}"
+cp -rfv "${KERNEL_PATH}/.config" "/tmp/artifacts/kernel_config_${KERNEL_VERSION}-${CODENAME}"
 cp -rfv ../*.deb /tmp/artifacts/
-sha256sum ../*.deb >/tmp/artifacts/sha256
+mv "/tmp/artifacts/linux-libc-dev_${KERNEL_VERSION}-${PKGREL}_amd64.deb" "/tmp/artifacts/linux-libc-dev_${KERNEL_VERSION}-${PKGREL}-${CODENAME}_amd64.deb"
+sha256sum ../*.deb >/tmp/artifacts/sha256-"${CODENAME}"

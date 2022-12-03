@@ -5,9 +5,9 @@ set -eu -o pipefail
 BUILD_PATH=/tmp/build-kernel
 
 # Patches
-APPLE_SMC_DRIVER_GIT_URL=https://github.com/AdityaGarg8/linux-t2-patches.git
+APPLE_SMC_DRIVER_GIT_URL=https://github.com/t2linux/linux-t2-patches.git
 APPLE_SMC_DRIVER_BRANCH_NAME=main
-APPLE_SMC_DRIVER_COMMIT_HASH=18d3466c7c6eba76743e65418847357f16e11a23
+APPLE_SMC_DRIVER_COMMIT_HASH=HEAD
 
 rm -rf "${BUILD_PATH}"
 mkdir -p "${BUILD_PATH}"
@@ -18,7 +18,7 @@ git clone --single-branch --branch ${APPLE_SMC_DRIVER_BRANCH_NAME} ${APPLE_SMC_D
   "${BUILD_PATH}/linux-mbp-arch"
 cd "${BUILD_PATH}/linux-mbp-arch" || exit
 git checkout ${APPLE_SMC_DRIVER_COMMIT_HASH}
-rm 100*
+rm 1001*
 
 while IFS= read -r file; do
   echo "==> Adding ${file}"
