@@ -16,7 +16,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y lsb-release
 
-KERNEL_VERSION=6.0.11
+KERNEL_VERSION=6.1.1
 PKGREL=1
 CODENAME=$(lsb_release -c | cut -d ":" -f 2 | xargs)
 
@@ -131,5 +131,11 @@ echo >&2 "===]> Info: Copying debs and calculating SHA256 ... "
 #cp -rfv "${KERNEL_PATH}/.config" "${REPO_PATH}/kernel_config_${KERNEL_VERSION}"
 cp -rfv "${KERNEL_PATH}/.config" "/tmp/artifacts/kernel_config_${KERNEL_VERSION}-${CODENAME}"
 cp -rfv ../*.deb /tmp/artifacts/
+
+if [[ (${#KERNEL_VERSION} = 3) || (${#KERNEL_VERSION} = 4) ]]
+then
+mv "/tmp/artifacts/linux-libc-dev_${KERNEL_VERSION}.0-${PKGREL}_amd64.deb" "/tmp/artifacts/linux-libc-dev_${KERNEL_VERSION}.0-${PKGREL}-${CODENAME}_amd64.deb"
+else
 mv "/tmp/artifacts/linux-libc-dev_${KERNEL_VERSION}-${PKGREL}_amd64.deb" "/tmp/artifacts/linux-libc-dev_${KERNEL_VERSION}-${PKGREL}-${CODENAME}_amd64.deb"
+fi
 sha256sum ../*.deb >/tmp/artifacts/sha256-"${CODENAME}"
